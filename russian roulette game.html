@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Russian Roulette</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #111;
+      color: white;
+      text-align: center;
+      padding: 50px;
+      box-sizing: border-box;
+    }
+    h1 {
+      font-size: 3em;
+    }
+    button, select, input {
+      font-size: 1em;
+      margin: 10px;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background-color: #444;
+      color: white;
+    }
+    button:hover, select:hover, input:hover {
+      background-color: #666;
+    }
+    #status {
+      margin-top: 30px;
+      font-size: 1.5em;
+    }
+    .chamber {
+      margin: 30px auto;
+      width: 200px;
+      height: 200px;
+      position: relative;
+      border-radius: 50%;
+      background: radial-gradient(circle, #333 70%, #000 100%);
+      transition: transform 1.5s ease-out;
+    }
+    .slot {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background-color: #222;
+      border: 2px solid #666;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.2em;
+    }
+    .active {
+      background-color: #fff;
+      color: black;
+      font-weight: bold;
+    }
+    .bullet {
+      background-color: red;
+    }
+    .action-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #playerList {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background-color: rgba(0,0,0,0.7);
+      padding: 15px;
+      border-radius: 10px;
+      font-size: 1em;
+      text-align: left;
+      max-width: 200px;
+    }
+    .status-alive {
+      color: limegreen;
+    }
+    .status-dead {
+      color: red;
+    }
+    #nextRoundBtn, #newGameBtn {
+      display: none;
+      margin-top: 20px;
+      background-color: green;
+    }
+    #credit {
+      font-size: 0.9em;
+      margin-top: 20px;
+      color: lightgray;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Audio Effects -->
+<audio id="gunshotSound" src="gunshot.mp3" preload="auto"></audio>
+<audio id="clickSound" src="click.mp3" preload="auto"></audio>
+<audio id="spinSound" src="spin.mp3" preload="auto"></audio>
+
+<div id="playerList"></div>
+
+<h1>🔫 Russian Roulette</h1>
+
+<div>
+  Players: <input type="number" id="players" value="2" min="2" max="4">
+  Bullets: <input type="number" id="bullets" value="1" min="1" max="6">
+  <button onclick="startGame()">Start Game</button>
+</div>
+
+<p id="turnInfo"></p>
+
+<div class="action-row">
+  <button onclick="spinChamber()">🔄 Spin the Chamber</button>
+  <button onclick="pullTrigger('self')">🔥 Shoot Self</button>
+  <button onclick="shootSelectedPlayer()">🎯 Shoot Player</button>
+  <select id="targetPlayerSelect"></select>
+</div>
+
+<div class="chamber" id="chamber"></div>
+<div id="status">Chamber is ready. Spin it first!</div>
+
+<button id="nextRoundBtn" onclick="nextRound()">➡️ Next Round</button>
+<button id="newGameBtn" onclick="startGame()">🔁 New Game</button>
+
+<div id="credit">Credit: <b>PROOB<b> RBLX for making this game</div>
+
+<script>
+  let bulletPositions = [];
+  let currentChamber = 0;
+  let spinning = false;
+  let totalPlayers = 2;
+  let currentPlayer = 1;
+  let alivePlayers = [];
+
+  function startGame() {
+    totalPlayers = parseInt(document.getElementById("players").value);
+    const bulletCount = parseInt(document.getElementById("bullets").value);
+    if (bulletCount > 6) return alert("Max 6 bullets!");
+
+    bulletPositions = [];
+    alivePlayers = Array.from({ length: totalPlayers }, (_, i) => i + 1);
+    currentPlayer = 1;
+    currentChamber = 0;
+
+    addBullets(bulletCount);
+
+    drawChamber();
+    updateTurnInfo();
+    updateTargetSelect();
+    updatePlayerList();
+    document.getElementById("status").innerText = "Game started. Spin the chamber!";
+    document.getElementById("nextRoundBtn").style.display = "none";
+    document.getElementById("newGameBtn").style.display = "none";
+  }
+
+  function addBullets(count = 1) {
+    const available = [...Array(6).keys()].filter(p => !bulletPositions.includes(p));
+    for (let i = 0; i < count && available.length; i++) {
+      const index = Math.floor(Math.random() * available.length);
+      bulletPositions.push(available.splice(index, 1)[0]);
+    }
+  }
+
+  function updateTurnInfo() {
+    document.getElementById("turnInfo").innerText = `Player ${currentPlayer}'s turn.`;
+  }
+
+  function updateTargetSelect() {
+    const select = document.getElementById("targetPlayerSelect");
+    select.innerHTML = "";
+    alivePlayers.forEach(player => {
+      if (player !== currentPlayer) {
+        const option = document.createElement("option");
+        option.value = player;
+        option.textContent = `Player ${player}`;
+        select.appendChild(option);
+      }
+    });
+  }
+
+  function updatePlayerList() {
+    const list = document.getElementById("playerList");
+    list.innerHTML = "<strong>Players:</strong><br>";
+    for (let i = 1; i <= totalPlayers; i++) {
+      const status = alivePlayers.includes(i) ? "🟢 Alive" : "💀 Dead";
+      const cls = alivePlayers.includes(i) ? "status-alive" : "status-dead";
+      list.innerHTML += `<span class="${cls}">Player ${i}: ${status}</span><br>`;
+    }
+  }
+
+  function drawChamber(showBullet = false) {
+    const chamber = document.getElementById("chamber");
+    chamber.innerHTML = "";
+    const radius = 80;
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 * i) / 6;
+      const x = Math.cos(angle) * radius + 80;
+      const y = Math.sin(angle) * radius + 80;
+      const slot = document.createElement("div");
+      slot.className = "slot";
+      if (i === currentChamber) slot.classList.add("active");
+      if (bulletPositions.includes(i) && showBullet) {
+        slot.classList.add("bullet");
+        slot.innerText = "💣";
+      } else {
+        slot.innerText = i + 1;
+      }
+      slot.style.left = `${x}px`;
+      slot.style.top = `${y}px`;
+      chamber.appendChild(slot);
+    }
+  }
+
+  function spinChamber() {
+    if (spinning) return;
+    spinning = true;
+
+    document.getElementById("spinSound").play();
+    document.getElementById("status").innerText = "Spinning the chamber...";
+
+    const chamberEl = document.getElementById("chamber");
+    let spins = 5 + Math.floor(Math.random() * 8);
+    let finalPosition = Math.floor(Math.random() * 6);
+    currentChamber = finalPosition;
+
+    chamberEl.style.transition = "transform 1.5s ease-out";
+    chamberEl.style.transform = `rotate(${360 * spins + finalPosition * 60}deg)`;
+
+    setTimeout(() => {
+      chamberEl.style.transition = "none";
+      chamberEl.style.transform = "rotate(0deg)";
+      drawChamber();
+      spinning = false;
+      document.getElementById("status").innerText = "Spin complete. Choose your action.";
+    }, 1600);
+  }
+
+  function nextTurn() {
+    do {
+      currentPlayer = (currentPlayer % totalPlayers) + 1;
+    } while (!alivePlayers.includes(currentPlayer));
+
+    updateTurnInfo();
+    updateTargetSelect();
+  }
+
+  function nextRound() {
+    addBullets(1);
+    document.getElementById("status").innerText = "Next round started. Spin again!";
+    document.getElementById("nextRoundBtn").style.display = "none";
+    drawChamber();
+    nextTurn();
+  }
+
+  function pullTrigger(target) {
+    if (spinning) return;
+    if (!alivePlayers.includes(currentPlayer)) return;
+
+    const hit = bulletPositions.includes(currentChamber);
+    const gunshot = document.getElementById("gunshotSound");
+    const click = document.getElementById("clickSound");
+
+    if (hit) {
+      gunshot.play();
+      if (target === 'self') {
+        document.getElementById("status").innerText = `💥 Player ${currentPlayer} shot themselves and is out!`;
+        alivePlayers = alivePlayers.filter(p => p !== currentPlayer);
+      }
+      bulletPositions = bulletPositions.filter(b => b !== currentChamber);
+    } else {
+      click.play();
+      document.getElementById("status").innerText = `Click. Player ${currentPlayer} is lucky...`;
+    }
+
+    currentChamber = (currentChamber + 1) % 6;
+    drawChamber();
+    updatePlayerList();
+
+    if (alivePlayers.length <= 1) {
+      document.getElementById("status").innerText += ` 🎉 Player ${alivePlayers[0]} wins!`;
+      document.getElementById("newGameBtn").style.display = "inline-block";
+    } else if (hit) {
+      document.getElementById("nextRoundBtn").style.display = "inline-block";
+    } else {
+      nextTurn();
+    }
+  }
+
+  function shootSelectedPlayer() {
+    if (spinning) return;
+    const select = document.getElementById("targetPlayerSelect");
+    const targetPlayer = parseInt(select.value);
+    if (!alivePlayers.includes(targetPlayer)) return;
+
+    const hit = bulletPositions.includes(currentChamber);
+    const gunshot = document.getElementById("gunshotSound");
+    const click = document.getElementById("clickSound");
+
+    if (hit) {
+      gunshot.play();
+      document.getElementById("status").innerText = `💥 Player ${currentPlayer} shot Player ${targetPlayer}! They're out!`;
+      alivePlayers = alivePlayers.filter(p => p !== targetPlayer);
+      bulletPositions = bulletPositions.filter(b => b !== currentChamber);
+    } else {
+      click.play();
+      document.getElementById("status").innerText = `Click. Player ${currentPlayer} missed...`;
+    }
+
+    currentChamber = (currentChamber + 1) % 6;
+    drawChamber();
+    updatePlayerList();
+
+    if (alivePlayers.length <= 1) {
+      document.getElementById("status").innerText += ` 🎉 Player ${alivePlayers[0]} wins!`;
+      document.getElementById("newGameBtn").style.display = "inline-block";
+    } else if (hit) {
+      document.getElementById("nextRoundBtn").style.display = "inline-block";
+    } else {
+      nextTurn();
+    }
+  }
+</script>
+
+</body>
+</html>
